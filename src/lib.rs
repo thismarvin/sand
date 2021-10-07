@@ -116,27 +116,17 @@ impl World {
             return false;
         }
 
-        if State::from(self.data[a]) == State::Solid && State::from(self.data[b]) == State::Liquid {
-            let temp_a = self.data[a];
-            let temp_b = self.data[b];
+        match (State::from(self.data[a]), State::from(self.data[b])) {
+            (State::Solid, State::Liquid) | (State::Solid, State::Gas) => {
+                let temp_a = self.data[a];
+                let temp_b = self.data[b];
 
-            self.data[a] = temp_b;
-            self.data[b] = temp_a;
+                self.data[a] = temp_b;
+                self.data[b] = temp_a;
 
-            return true;
-        }
-
-        if matches!(
-            (State::from(self.data[a]), State::from(self.data[b])),
-            (State::Solid, State::Gas)
-        ) {
-            let temp_a = self.data[a];
-            let temp_b = self.data[b];
-
-            self.data[a] = temp_b;
-            self.data[b] = temp_a;
-
-            return true;
+                return true;
+            }
+            _ => (),
         }
 
         if self.dirty[a] || self.dirty[b] {
