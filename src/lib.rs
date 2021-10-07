@@ -252,7 +252,7 @@ impl World {
                             }
 
                             if left_blocked && right_blocked {
-                                return;
+                                break;
                             }
                         }
                     }
@@ -337,7 +337,7 @@ impl World {
                             }
 
                             if left_blocked && right_blocked {
-                                return;
+                                break;
                             }
                         }
 
@@ -391,7 +391,7 @@ impl World {
                             }
 
                             if left_blocked && right_blocked {
-                                return;
+                                break;
                             }
                         }
                     }
@@ -462,7 +462,7 @@ impl World {
                             }
 
                             if left_blocked && right_blocked {
-                                return;
+                                break;
                             }
                         }
 
@@ -508,7 +508,7 @@ impl World {
                             }
 
                             if left_blocked && right_blocked {
-                                return;
+                                break;
                             }
                         }
                     }
