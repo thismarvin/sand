@@ -6,7 +6,7 @@ fn set_panic_hook() {
 }
 
 #[wasm_bindgen]
-#[repr(u32)]
+#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Material {
     Air = 0,
