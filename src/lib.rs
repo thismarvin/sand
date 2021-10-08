@@ -36,6 +36,16 @@ impl From<Material> for State {
 }
 
 #[wasm_bindgen]
+#[repr(u8)]
+#[derive(Clone, Copy)]
+pub enum Tint {
+    None = 0,
+    Dark = 1,
+    Darker = 2,
+    Darkest = 3,
+}
+
+#[wasm_bindgen]
 #[derive(Clone, Copy)]
 pub struct Size {
     width: usize,
@@ -47,6 +57,8 @@ pub struct World {
     size: Size,
     data: Vec<Material>,
     dirty: Vec<bool>,
+    tints: Vec<Tint>,
+    spreads: Vec<u8>,
 }
 
 #[wasm_bindgen]
@@ -59,6 +71,8 @@ impl World {
         World {
             size,
             data: vec![Material::Air; size.width * size.height],
+            tints: vec![Tint::None; size.width * size.height],
+            spreads: vec![0; size.width * size.height],
             dirty: vec![false; size.width * size.height],
         }
     }
@@ -75,6 +89,10 @@ impl World {
         self.data.as_ptr()
     }
 
+    pub fn tints(&self) -> *const Tint {
+        self.tints.as_ptr()
+    }
+
     fn get(&self, x: usize, y: usize) -> Option<&Material> {
         self.data.get(y * self.size.width + x)
     }
@@ -88,7 +106,15 @@ impl World {
         }
     }
 
-    pub fn paint(&mut self, x: usize, y: usize, radius: usize, material: Material) {
+    pub fn paint(
+        &mut self,
+        x: usize,
+        y: usize,
+        radius: usize,
+        material: Material,
+        tint: Tint,
+        spread: u8,
+    ) {
         for j in (y as isize - radius as isize)..(y as isize + radius as isize + 1) {
             if j < 0 || j > self.size.height as isize - 1 {
                 continue;
@@ -103,6 +129,9 @@ impl World {
 
                 if distance.ceil() <= radius as f32 {
                     self.place(i as usize, j as usize, material);
+
+                    self.tints[(j as usize) * self.size.width + (i as usize)] = tint;
+                    self.spreads[(j as usize) * self.size.width + (i as usize)] = spread;
                 }
             }
         }
@@ -123,6 +152,18 @@ impl World {
 
                 self.data[a] = temp_b;
                 self.data[b] = temp_a;
+
+                let temp_a = self.tints[a];
+                let temp_b = self.tints[b];
+
+                self.tints[a] = temp_b;
+                self.tints[b] = temp_a;
+
+                let temp_a = self.spreads[a];
+                let temp_b = self.spreads[b];
+
+                self.spreads[a] = temp_b;
+                self.spreads[b] = temp_a;
 
                 return true;
             }
@@ -145,6 +186,18 @@ impl World {
         if temp_a != Material::Air {
             self.dirty[b] = true;
         }
+
+        let temp_a = self.tints[a];
+        let temp_b = self.tints[b];
+
+        self.tints[a] = temp_b;
+        self.tints[b] = temp_a;
+
+        let temp_a = self.spreads[a];
+        let temp_b = self.spreads[b];
+
+        self.spreads[a] = temp_b;
+        self.spreads[b] = temp_a;
 
         true
     }
@@ -183,7 +236,7 @@ impl World {
                             }
                         }
 
-                        let spread = 2;
+                        let spread = self.spreads[y * self.size.width + x];
 
                         let mut left_blocked = false;
                         let mut right_blocked = false;
@@ -269,7 +322,7 @@ impl World {
                             }
                         }
 
-                        let spread = 5;
+                        let spread = self.spreads[y * self.size.width + x];
 
                         let mut dir = -preference;
                         let mut left_blocked = false;
@@ -403,7 +456,7 @@ impl World {
                             }
                         }
 
-                        let spread = 2;
+                        let spread = self.spreads[y * self.size.width + x];
 
                         let mut dir = -preference;
                         let mut left_blocked = false;
