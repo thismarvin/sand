@@ -116,30 +116,102 @@ impl World {
 
     pub fn paint(
         &mut self,
-        x: usize,
-        y: usize,
+        x1: usize,
+        y1: usize,
+        x2: usize,
+        y2: usize,
         radius: usize,
         material: Material,
         tint: Tint,
         spread: u8,
     ) {
-        for j in (y as isize - radius as isize)..(y as isize + radius as isize + 1) {
-            if j < 0 || j > self.size.height as isize - 1 {
-                continue;
+        let x1 = x1 as isize;
+        let y1 = y1 as isize;
+        let x2 = x2 as isize;
+        let y2 = y2 as isize;
+        let radius = radius as isize;
+
+        let dx = x2 - x1;
+        let dy = y2 - y1;
+
+        const LEEWAY: isize = 1;
+
+        if -LEEWAY <= dx && dx <= LEEWAY {
+            let range = dy.abs() as usize;
+            let range = range.max(1);
+            let range = range.min(self.size.height);
+
+            let mut x = x1;
+            let mut y = y1;
+
+            if y2 < y1 {
+                x = x2;
+                y = y2;
             }
 
-            for i in (x as isize - radius as isize)..(x as isize + radius as isize + 1) {
-                if i < 0 || i > self.size.width as isize - 1 {
+            for i in 0..range {
+                let y = y + i as isize;
+
+                for j in (y - radius)..(y + radius + 1) {
+                    if j < 0 || j > self.size.height as isize - 1 {
+                        continue;
+                    }
+
+                    for i in (x - radius)..(x + radius + 1) {
+                        if i < 0 || i > self.size.width as isize - 1 {
+                            continue;
+                        }
+
+                        let distance = (((x - i).pow(2) + (y - j).pow(2)) as f32).sqrt();
+
+                        if distance.ceil() <= radius as f32 {
+                            self.place(i as usize, j as usize, material);
+
+                            self.tints[(j as usize) * self.size.width + (i as usize)] = tint;
+                            self.spreads[(j as usize) * self.size.width + (i as usize)] = spread;
+                        }
+                    }
+                }
+            }
+
+            return;
+        }
+
+        let slope = dy as f32 / dx as f32;
+        let y_intercept = y1 as f32 - slope * x1 as f32;
+
+        let domain = dx.abs() as usize;
+        let domain = (domain).max(1);
+        let domain = (domain).min(self.size.width);
+
+        let leftmost = x1.min(x2) as f32;
+
+        const STEP: f32 = 0.5;
+        let domain = (domain as f32 / STEP).ceil() as usize;
+
+        for i in 0..domain {
+            let x = leftmost + i as f32 * STEP;
+            let y = (((slope * x).ceil()) + y_intercept) as isize;
+            let x = x as isize;
+
+            for j in (y - radius as isize)..(y + radius as isize + 1) {
+                if j < 0 || j > self.size.height as isize - 1 {
                     continue;
                 }
 
-                let distance = (((x as isize - i).pow(2) + (y as isize - j).pow(2)) as f32).sqrt();
+                for i in (x - radius as isize)..(x + radius as isize + 1) {
+                    if i < 0 || i > self.size.width as isize - 1 {
+                        continue;
+                    }
 
-                if distance.ceil() <= radius as f32 {
-                    self.place(i as usize, j as usize, material);
+                    let distance = (((x - i).pow(2) + (y - j).pow(2)) as f32).sqrt();
 
-                    self.tints[(j as usize) * self.size.width + (i as usize)] = tint;
-                    self.spreads[(j as usize) * self.size.width + (i as usize)] = spread;
+                    if distance.ceil() <= radius as f32 {
+                        self.place(i as usize, j as usize, material);
+
+                        self.tints[(j as usize) * self.size.width + (i as usize)] = tint;
+                        self.spreads[(j as usize) * self.size.width + (i as usize)] = spread;
+                    }
                 }
             }
         }
