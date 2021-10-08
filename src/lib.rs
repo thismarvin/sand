@@ -97,6 +97,14 @@ impl World {
         self.data.get(y * self.size.width + x)
     }
 
+    pub fn clear(&mut self) {
+        for i in 0..self.data.len() {
+            self.data[i] = Material::Air;
+            self.tints[i] = Tint::None;
+            self.spreads[i] = 0;
+        }
+    }
+
     pub fn place(&mut self, x: usize, y: usize, material: Material) {
         let index = y * self.size.width + x;
 
