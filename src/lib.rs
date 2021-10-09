@@ -226,7 +226,9 @@ impl World {
         }
 
         match (State::from(self.data[a]), State::from(self.data[b])) {
-            (State::Solid, State::Liquid) | (State::Solid, State::Gas) => {
+            (State::Solid, State::Liquid)
+            | (State::Solid, State::Gas)
+            | (State::Liquid, State::Gas) => {
                 let temp_a = self.data[a];
                 let temp_b = self.data[b];
 
