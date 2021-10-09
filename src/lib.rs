@@ -5,6 +5,10 @@ fn set_panic_hook() {
     console_error_panic_hook::set_once();
 }
 
+fn distance(x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
+    (((x2 - x1).powi(2) + (y2 - y1).powi(2)) as f32).sqrt()
+}
+
 #[wasm_bindgen]
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -105,13 +109,18 @@ impl World {
         }
     }
 
-    pub fn place(&mut self, x: usize, y: usize, material: Material) {
+    pub fn place(&mut self, x: usize, y: usize, material: Material, tint: Tint, spread: u8) {
         let index = y * self.size.width + x;
 
-        if let Some(cell) = self.data.get_mut(index) {
-            self.dirty[index] = true;
-            *cell = material;
+        if index >= self.data.len() {
+            return;
         }
+
+        self.data[index] = material;
+        self.tints[index] = tint;
+        self.spreads[index] = spread;
+
+        self.dirty[index] = true;
     }
 
     pub fn paint(
@@ -162,13 +171,10 @@ impl World {
                             continue;
                         }
 
-                        let distance = (((x - i).pow(2) + (y - j).pow(2)) as f32).sqrt();
+                        let distance = distance(x as f32, y as f32, i as f32, j as f32).ceil();
 
-                        if distance.ceil() <= radius as f32 {
-                            self.place(i as usize, j as usize, material);
-
-                            self.tints[(j as usize) * self.size.width + (i as usize)] = tint;
-                            self.spreads[(j as usize) * self.size.width + (i as usize)] = spread;
+                        if distance <= radius as f32 {
+                            self.place(i as usize, j as usize, material, tint, spread);
                         }
                     }
                 }
@@ -181,8 +187,8 @@ impl World {
         let y_intercept = y1 as f32 - slope * x1 as f32;
 
         let domain = dx.abs() as usize;
-        let domain = (domain).max(1);
-        let domain = (domain).min(self.size.width);
+        let domain = domain.max(1);
+        let domain = domain.min(self.size.width);
 
         let leftmost = x1.min(x2) as f32;
 
@@ -194,23 +200,20 @@ impl World {
             let y = (((slope * x).ceil()) + y_intercept) as isize;
             let x = x as isize;
 
-            for j in (y - radius as isize)..(y + radius as isize + 1) {
+            for j in (y - radius)..(y + radius + 1) {
                 if j < 0 || j > self.size.height as isize - 1 {
                     continue;
                 }
 
-                for i in (x - radius as isize)..(x + radius as isize + 1) {
+                for i in (x - radius)..(x + radius + 1) {
                     if i < 0 || i > self.size.width as isize - 1 {
                         continue;
                     }
 
-                    let distance = (((x - i).pow(2) + (y - j).pow(2)) as f32).sqrt();
+                    let distance = distance(x as f32, y as f32, i as f32, j as f32).ceil();
 
-                    if distance.ceil() <= radius as f32 {
-                        self.place(i as usize, j as usize, material);
-
-                        self.tints[(j as usize) * self.size.width + (i as usize)] = tint;
-                        self.spreads[(j as usize) * self.size.width + (i as usize)] = spread;
+                    if distance <= radius as f32 {
+                        self.place(i as usize, j as usize, material, tint, spread);
                     }
                 }
             }
