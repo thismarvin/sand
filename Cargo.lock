@@ -64,14 +64,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sand"
-version = "0.1.0"
-dependencies = [
- "console_error_panic_hook",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "syn"
 version = "1.0.77"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -80,6 +72,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-xid",
+]
+
+[[package]]
+name = "thismarvin-sand"
+version = "0.1.0"
+dependencies = [
+ "console_error_panic_hook",
+ "wasm-bindgen",
 ]
 
 [[package]]
