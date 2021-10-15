@@ -1,5 +1,15 @@
 use wasm_bindgen::prelude::*;
 
+// #[wasm_bindgen]
+// extern "C" {
+//     #[wasm_bindgen(js_namespace = console)]
+//     fn log(s: &str);
+// }
+//
+// macro_rules! console_log {
+//     ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
+// }
+
 fn set_panic_hook() {
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
@@ -59,6 +69,11 @@ pub struct Size {
 #[wasm_bindgen]
 pub struct World {
     size: Size,
+    chunk_size: usize,
+    chunk_columns: usize,
+    hot: bool,
+    active_chunks: Vec<bool>,
+    forecast: Vec<bool>,
     data: Vec<Material>,
     dirty: Vec<bool>,
     tints: Vec<Tint>,
@@ -67,13 +82,21 @@ pub struct World {
 
 #[wasm_bindgen]
 impl World {
-    pub fn with_size(width: usize, height: usize) -> Self {
+    pub fn with_size(width: usize, height: usize, chunk_size: usize) -> Self {
         set_panic_hook();
 
         let size = Size { width, height };
 
+        let columns = (width as f32 / chunk_size as f32).ceil() as usize;
+        let rows = (height as f32 / chunk_size as f32).ceil() as usize;
+
         World {
             size,
+            chunk_size,
+            chunk_columns: columns,
+            hot: false,
+            active_chunks: vec![false; columns * rows],
+            forecast: vec![false; columns * rows],
             data: vec![Material::Air; size.width * size.height],
             tints: vec![Tint::None; size.width * size.height],
             spreads: vec![0; size.width * size.height],
@@ -101,11 +124,30 @@ impl World {
         self.data.get(y * self.size.width + x)
     }
 
+    fn get_chunk_index(&self, x: usize, y: usize) -> Option<usize> {
+        let x = x / self.chunk_size;
+        let y = y / self.chunk_size;
+
+        let index = y * self.chunk_columns + x;
+
+        match self.active_chunks.get(index) {
+            Some(_) => Some(index),
+            None => None,
+        }
+    }
+
     pub fn clear(&mut self) {
         for i in 0..self.data.len() {
             self.data[i] = Material::Air;
             self.tints[i] = Tint::None;
             self.spreads[i] = 0;
+        }
+
+        self.hot = false;
+
+        for i in 0..self.active_chunks.len() {
+            self.active_chunks[i] = false;
+            self.forecast[i] = false;
         }
     }
 
@@ -121,6 +163,96 @@ impl World {
         self.spreads[index] = spread;
 
         self.dirty[index] = true;
+
+        self.warm_up(x, y);
+
+        // Instead of queuing chunks to be active, immediately set the chunks as active.
+        for (i, entry) in self.forecast.iter_mut().enumerate() {
+            if *entry {
+                self.active_chunks[i] = true;
+
+                *entry = false;
+            }
+        }
+
+        self.hot = true;
+    }
+
+    fn warm_up(&mut self, x: usize, y: usize) {
+        let x = x / self.chunk_size;
+        let y = y / self.chunk_size;
+
+        let base = y * self.chunk_columns + x;
+
+        let index = base;
+
+        if let Some(target) = self.forecast.get_mut(index) {
+            *target = true;
+        }
+
+        if x > 0 {
+            let index = base - 1;
+
+            if let Some(target) = self.forecast.get_mut(index) {
+                *target = true;
+            }
+        }
+
+        if x < self.chunk_columns - 1 {
+            let index = base + 1;
+
+            if let Some(target) = self.forecast.get_mut(index) {
+                *target = true;
+            }
+        }
+
+        if y > 0 {
+            let index = base - self.chunk_columns;
+
+            if let Some(target) = self.forecast.get_mut(index) {
+                *target = true;
+            }
+
+            if x > 0 {
+                let index = base - self.chunk_columns - 1;
+
+                if let Some(target) = self.forecast.get_mut(index) {
+                    *target = true;
+                }
+            }
+
+            if x < self.chunk_columns - 1 {
+                let index = base - self.chunk_columns + 1;
+
+                if let Some(target) = self.forecast.get_mut(index) {
+                    *target = true;
+                }
+            }
+        }
+
+        if y < self.chunk_columns - 1 {
+            let index = base + self.chunk_columns;
+
+            if let Some(target) = self.forecast.get_mut(index) {
+                *target = true;
+            }
+
+            if x > 0 {
+                let index = base + self.chunk_columns - 1;
+
+                if let Some(target) = self.forecast.get_mut(index) {
+                    *target = true;
+                }
+            }
+
+            if x < self.chunk_columns - 1 {
+                let index = base + self.chunk_columns + 1;
+
+                if let Some(target) = self.forecast.get_mut(index) {
+                    *target = true;
+                }
+            }
+        }
     }
 
     pub fn paint(
@@ -288,8 +420,12 @@ impl World {
     }
 
     pub fn simulate(&mut self) {
-        for flag in self.dirty.iter_mut() {
-            *flag = false;
+        if !self.hot {
+            return;
+        }
+
+        for entry in self.dirty.iter_mut() {
+            *entry = false;
         }
 
         for y in (0..self.size.height).rev() {
@@ -306,6 +442,17 @@ impl World {
                     continue;
                 }
 
+                if let Some(index) = self.get_chunk_index(x, y) {
+                    if let Some(chunk) = self.active_chunks.get(index) {
+                        if !chunk {
+                            continue;
+                        }
+                    }
+                } else {
+                    // I do not think this will ever be reached, but you can never be too safe!
+                    continue;
+                }
+
                 let data = self.data[y * self.size.width + x];
 
                 (|| match data {
@@ -314,6 +461,8 @@ impl World {
                             match State::from(*material) {
                                 State::Gas | State::Liquid => {
                                     if self.swap(x, y, x, y + 1) {
+                                        self.warm_up(x, y + 1);
+
                                         return;
                                     }
                                 }
@@ -374,7 +523,13 @@ impl World {
                                         Some(material)
                                             if matches!(State::from(*material), State::Gas) =>
                                         {
-                                            self.swap(x, y, index, y + 1)
+                                            if self.swap(x, y, index, y + 1) {
+                                                self.warm_up(x, y + 1);
+
+                                                return true;
+                                            }
+
+                                            false
                                         }
                                         _ => {
                                             update_blockade();
@@ -400,6 +555,8 @@ impl World {
                             match State::from(*material) {
                                 State::Gas => {
                                     if self.swap(x, y, x, y + 1) {
+                                        self.warm_up(x, y + 1);
+
                                         return;
                                     }
                                 }
@@ -459,7 +616,13 @@ impl World {
                                         Some(material)
                                             if matches!(State::from(*material), State::Gas) =>
                                         {
-                                            self.swap(x, y, index, y + 1)
+                                            if self.swap(x, y, index, y + 1) {
+                                                self.warm_up(x, y + 1);
+
+                                                return true;
+                                            }
+
+                                            false
                                         }
                                         _ => {
                                             update_blockade();
@@ -513,7 +676,13 @@ impl World {
                                         Some(material)
                                             if matches!(State::from(*material), State::Gas) =>
                                         {
-                                            self.swap(x, y, index, y)
+                                            if self.swap(x, y, index, y) {
+                                                self.warm_up(x, y);
+
+                                                return true;
+                                            }
+
+                                            false
                                         }
                                         _ => {
                                             update_blockade();
@@ -537,6 +706,7 @@ impl World {
                     Material::Smoke => {
                         if let Some(Material::Air) = self.get(x, y - 1) {
                             if self.swap(x, y, x, y - 1) {
+                                self.warm_up(x, y - 1);
                                 return;
                             }
                         }
@@ -585,7 +755,15 @@ impl World {
 
                                     match self.get(index, y - 1) {
                                         Some(Material::Smoke) => false,
-                                        Some(Material::Air) => self.swap(x, y, index, y - 1),
+                                        Some(Material::Air) => {
+                                            if self.swap(x, y, index, y - 1) {
+                                                self.warm_up(x, y - 1);
+
+                                                return true;
+                                            }
+
+                                            false
+                                        }
                                         _ => {
                                             update_blockade();
 
@@ -627,7 +805,15 @@ impl World {
 
                                     match self.get(index, y) {
                                         Some(Material::Smoke) => false,
-                                        Some(Material::Air) => self.swap(x, y, index, y),
+                                        Some(Material::Air) => {
+                                            if self.swap(x, y, index, y) {
+                                                self.warm_up(x, y);
+
+                                                return true;
+                                            }
+
+                                            false
+                                        }
                                         _ => {
                                             if dir < 0 {
                                                 left_blocked = true;
@@ -653,6 +839,18 @@ impl World {
                     _ => (),
                 })();
             }
+        }
+
+        self.hot = false;
+
+        for (i, entry) in self.forecast.iter_mut().enumerate() {
+            if *entry {
+                self.hot = true;
+            }
+
+            self.active_chunks[i] = *entry;
+
+            *entry = false;
         }
     }
 }
