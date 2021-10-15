@@ -82,7 +82,7 @@ pub struct World {
 
 #[wasm_bindgen]
 impl World {
-    pub fn new(width: usize, height: usize, chunk_size: usize) -> Self {
+    pub fn create(width: usize, height: usize, chunk_size: usize) -> Self {
         set_panic_hook();
 
         let size = Size { width, height };
