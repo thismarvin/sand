@@ -1,5 +1,5 @@
 [package]
-name = "thismarvin-sand"
+name = "sand"
 version = "0.1.0"
 description = "a simple falling sand celluar automaton"
 repository = "https://github.com/thismarvin/sand"

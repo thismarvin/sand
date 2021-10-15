@@ -62,8 +62,8 @@ pub enum Tint {
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
 pub struct Size {
-    width: usize,
-    height: usize,
+    pub width: usize,
+    pub height: usize,
 }
 
 #[wasm_bindgen]
@@ -74,7 +74,7 @@ pub struct World {
     hot: bool,
     active_chunks: Vec<bool>,
     forecast: Vec<bool>,
-    data: Vec<Material>,
+    materials: Vec<Material>,
     dirty: Vec<bool>,
     tints: Vec<Tint>,
     spreads: Vec<u8>,
@@ -82,7 +82,7 @@ pub struct World {
 
 #[wasm_bindgen]
 impl World {
-    pub fn with_size(width: usize, height: usize, chunk_size: usize) -> Self {
+    pub fn new(width: usize, height: usize, chunk_size: usize) -> Self {
         set_panic_hook();
 
         let size = Size { width, height };
@@ -97,23 +97,19 @@ impl World {
             hot: false,
             active_chunks: vec![false; columns * rows],
             forecast: vec![false; columns * rows],
-            data: vec![Material::Air; size.width * size.height],
+            materials: vec![Material::Air; size.width * size.height],
             tints: vec![Tint::None; size.width * size.height],
             spreads: vec![0; size.width * size.height],
             dirty: vec![false; size.width * size.height],
         }
     }
 
-    pub fn width(&self) -> usize {
-        self.size.width
+    pub fn size(&self) -> Size {
+        self.size
     }
 
-    pub fn height(&self) -> usize {
-        self.size.height
-    }
-
-    pub fn data(&self) -> *const Material {
-        self.data.as_ptr()
+    pub fn materials(&self) -> *const Material {
+        self.materials.as_ptr()
     }
 
     pub fn tints(&self) -> *const Tint {
@@ -121,7 +117,7 @@ impl World {
     }
 
     fn get(&self, x: usize, y: usize) -> Option<&Material> {
-        self.data.get(y * self.size.width + x)
+        self.materials.get(y * self.size.width + x)
     }
 
     fn get_chunk_index(&self, x: usize, y: usize) -> Option<usize> {
@@ -136,9 +132,9 @@ impl World {
         }
     }
 
-    pub fn clear(&mut self) {
-        for i in 0..self.data.len() {
-            self.data[i] = Material::Air;
+    pub fn reset(&mut self) {
+        for i in 0..self.materials.len() {
+            self.materials[i] = Material::Air;
             self.tints[i] = Tint::None;
             self.spreads[i] = 0;
         }
@@ -154,11 +150,11 @@ impl World {
     pub fn place(&mut self, x: usize, y: usize, material: Material, tint: Tint, spread: u8) {
         let index = y * self.size.width + x;
 
-        if index >= self.data.len() {
+        if index >= self.materials.len() {
             return;
         }
 
-        self.data[index] = material;
+        self.materials[index] = material;
         self.tints[index] = tint;
         self.spreads[index] = spread;
 
@@ -356,19 +352,22 @@ impl World {
         let a = y1 * self.size.width + x1;
         let b = y2 * self.size.width + x2;
 
-        if a > self.data.len() || b > self.data.len() {
+        if a > self.materials.len() || b > self.materials.len() {
             return false;
         }
 
-        match (State::from(self.data[a]), State::from(self.data[b])) {
+        match (
+            State::from(self.materials[a]),
+            State::from(self.materials[b]),
+        ) {
             (State::Solid, State::Liquid)
             | (State::Solid, State::Gas)
             | (State::Liquid, State::Gas) => {
-                let temp_a = self.data[a];
-                let temp_b = self.data[b];
+                let temp_a = self.materials[a];
+                let temp_b = self.materials[b];
 
-                self.data[a] = temp_b;
-                self.data[b] = temp_a;
+                self.materials[a] = temp_b;
+                self.materials[b] = temp_a;
 
                 let temp_a = self.tints[a];
                 let temp_b = self.tints[b];
@@ -391,11 +390,11 @@ impl World {
             return false;
         }
 
-        let temp_a = self.data[a];
-        let temp_b = self.data[b];
+        let temp_a = self.materials[a];
+        let temp_b = self.materials[b];
 
-        self.data[a] = temp_b;
-        self.data[b] = temp_a;
+        self.materials[a] = temp_b;
+        self.materials[b] = temp_a;
 
         if temp_b != Material::Air {
             self.dirty[a] = true;
@@ -453,9 +452,9 @@ impl World {
                     continue;
                 }
 
-                let data = self.data[y * self.size.width + x];
+                let material = self.materials[y * self.size.width + x];
 
-                (|| match data {
+                (|| match material {
                     Material::Sand => {
                         if let Some(material) = self.get(x, y + 1) {
                             match State::from(*material) {
