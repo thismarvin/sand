@@ -126,10 +126,7 @@ impl World {
 
         let index = y * self.chunk_columns + x;
 
-        match self.active_chunks.get(index) {
-            Some(_) => Some(index),
-            None => None,
-        }
+        self.active_chunks.get(index).map(|_| index)
     }
 
     pub fn reset(&mut self) {
@@ -551,15 +548,12 @@ impl World {
 
                     Material::Water => {
                         if let Some(material) = self.get(x, y + 1) {
-                            match State::from(*material) {
-                                State::Gas => {
-                                    if self.swap(x, y, x, y + 1) {
-                                        self.warm_up(x, y + 1);
+                            if let State::Gas = State::from(*material) {
+                                if self.swap(x, y, x, y + 1) {
+                                    self.warm_up(x, y + 1);
 
-                                        return;
-                                    }
+                                    return;
                                 }
-                                _ => (),
                             }
                         }
 
@@ -733,10 +727,10 @@ impl World {
 
                                     let index = index as usize;
 
-                                    let blocked = match self.get(index, y) {
-                                        Some(Material::Smoke | Material::Air) => false,
-                                        _ => true,
-                                    };
+                                    let blocked = matches!(
+                                        self.get(index, y),
+                                        Some(Material::Smoke | Material::Air)
+                                    );
 
                                     let mut update_blockade = || {
                                         if dir < 0 {
